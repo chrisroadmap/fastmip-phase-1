@@ -1,3 +1,9 @@
+# don't commit notebooks, plots or restricted files
+*.ipynb
+*.png
+*.pdf
+data/emissions/ScenarioMIP_emissions_marker_scenarios_v0.1.xlsx
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

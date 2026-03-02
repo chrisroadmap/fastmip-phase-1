@@ -1,0 +1,14 @@
+name: fastmip-phase-1
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - fair=2.2.4
+  - jupyter
+  - jupytext
+  - matplotlib
+  - numpy
+  - openpyxl
+  - pandas
+  - tqdm
+  - xarray
