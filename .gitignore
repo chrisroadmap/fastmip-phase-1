@@ -3,6 +3,7 @@
 *.png
 *.pdf
 data/emissions/ScenarioMIP_emissions_marker_scenarios_v0.1.xlsx
+data/emissions/continuous_emissions_timeseries_1750_2500.csv
 output/
 
 # Byte-compiled / optimized / DLL files

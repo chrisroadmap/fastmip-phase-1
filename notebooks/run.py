@@ -25,19 +25,34 @@ from fair.interface import fill, initialise
 from fair.io import read_properties
 
 # %%
-historical = pd.read_csv('../data/emissions/historical_emissions_1750-2023_cmip7.csv')
+# historical = pd.read_csv('../data/emissions/historical_emissions_1750-2023_cmip7.csv')
 
 # %%
-historical.loc[historical.variable=='Halon-1202'].index
+# historical.loc[historical.variable=='Halon-1202'].index
 
 # %%
-historical = historical.drop(index=historical.loc[historical.variable=='Halon-1202'].index)
+# historical = historical.drop(index=historical.loc[historical.variable=='Halon-1202'].index)
 
 # %%
-emitted_species = list(historical.variable.values)
+# emitted_species = list(historical.variable.values)
 
 # %%
 future = pd.read_csv('../output/future_emissions_cleaned.csv')
+
+# %%
+future.loc[future.variable=='Halon-1202'].index
+
+# %%
+future = future.drop(index=future.loc[future.variable=='Halon-1202'].index)
+
+# %%
+future = future.drop(index=future.loc[future.variable=='Emissions|CO2|Gross Positive Emissions'].index)
+
+# %%
+future = future.drop(index=future.loc[future.variable=='Emissions|CO2|Gross Removals'].index)
+
+# %%
+emitted_species = list(future.variable.unique())
 
 # %%
 scenarios = list(future.scenario.unique())
@@ -46,31 +61,32 @@ scenarios = list(future.scenario.unique())
 scenarios
 
 # %%
+n_scen = len(scenarios)
+
+# %%
 df_solar = pd.read_csv('../data/forcing/solar_forcing_timebounds_cmip7.csv', index_col='year')
 df_volcanic = pd.read_csv('../data/forcing/volcanic_forcing_timebounds_cmip7.csv', index_col='Year')
 df_irrigation = pd.read_csv('../data/forcing/irrigation_forcing_timebounds_cmip7.csv', index_col=0)
 df_landuse = pd.read_csv('../data/forcing/land_use_forcing_timebounds_cmip7.csv', index_col=0)
 
 # %%
-solar_forcing = np.zeros(352)
-volcanic_forcing = np.zeros(352)
-
-# %%
-scenarios
+solar_forcing = np.zeros(752)
+volcanic_forcing = np.zeros(752)
 
 # %%
 scenarios_mapping = {
-    'Low-to-Negative - SSP2 (Marker)': 'LN',
-    'High - SSP3 (Marker)': 'H',
-    'Medium - SSP2 (Marker)': 'M',
-    'Low - SSP2 (Marker)': 'L',
-    'Very Low - SSP1 (Marker)': 'VL',
-    'High-to-Low - SSP5 (Marker)': 'HL'
+    'SSP2 - Low Overshoot_a': 'LN',
+    'SSP3 - High Emissions': 'H',
+    'SSP2 - Medium Emissions': 'M',
+    'SSP2 - Low Emissions': 'L',
+    'SSP1 - Very Low Emissions': 'VL',
+    'SSP5 - Medium-Low Emissions_a': 'HL',
+    'SSP2 - Medium-Low Emissions': 'ML'
 }
 
 # %%
-volcanic_forcing = df_volcanic["volcanic_erf_rel_1850-2021"].loc[1750:2101].values
-solar_forcing = df_solar["solar_erf_rel_1850-2019"].loc[1750:2101].values
+volcanic_forcing = df_volcanic["volcanic_erf_rel_1850-2021"].loc[1750:2501].values
+solar_forcing = df_solar["solar_erf_rel_1850-2019"].loc[1750:2501].values
 
 # %% [markdown]
 # ## With internal variability
@@ -78,7 +94,7 @@ solar_forcing = df_solar["solar_erf_rel_1850-2019"].loc[1750:2101].values
 # %%
 f = FAIR(ch4_method="Thornhill2021")
 
-f.define_time(1750, 2101, 1)
+f.define_time(1750, 2501, 1)
 f.define_scenarios(scenarios)
 
 species, properties = read_properties(
@@ -101,17 +117,17 @@ f.allocate()
 # %%
 for scenario in scenarios:
     for specie in emitted_species:
-        f.emissions.loc[dict(timepoints=np.arange(1750.5, 2024), scenario=scenario, specie=specie)] = (
-            historical.loc[historical.variable==specie, '1750':].T
-        )
-        f.emissions.loc[dict(timepoints=np.arange(2024.5, 2101), scenario=scenario, specie=specie)] = (
-            future.loc[(future.variable==specie) & (future.scenario==scenario), '2024':].T
+        # f.emissions.loc[dict(timepoints=np.arange(1750.5, 2024), scenario=scenario, specie=specie)] = (
+        #     historical.loc[historical.variable==specie, '1750':].T
+        # )
+        f.emissions.loc[dict(timepoints=np.arange(1750.5, 2501), scenario=scenario, specie=specie)] = (
+            future.loc[(future.variable==specie) & (future.scenario==scenario), '1750.0':].T
         )
     f.forcing.loc[dict(scenario=scenario, specie='Land use')] = (
-        df_landuse.loc[1750:2101, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Land use]"].values.squeeze()
+        df_landuse.loc[1750:2501, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Land use]"].values.squeeze()
     )
     f.forcing.loc[dict(scenario=scenario, specie='Irrigation')] = (
-        df_irrigation.loc[1750:2101, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Irrigation]"].values.squeeze()
+        df_irrigation.loc[1750:2501, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Irrigation]"].values.squeeze()
     )
 
 # %%
@@ -145,7 +161,7 @@ initialise(f.airborne_emissions, 0)
 f.run()
 
 # %%
-weights = np.zeros((352, 6, 841))
+weights = np.zeros((752, n_scen, 841))
 weights[100, :, :] = 0.5
 weights[101:151, :, :] = 1
 weights[151, :, :] = 0.5
@@ -162,7 +178,7 @@ temperature_baseline_1850_1900 = (
 )
 
 # %%
-weights = np.zeros((352, 6, 841))
+weights = np.zeros((752, n_scen, 841))
 weights[254, :, :] = 0.5
 weights[254:274, :, :] = 1
 weights[274, :, :] = 0.5
@@ -260,18 +276,18 @@ for scenario in scenarios:
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
 
 # %%
-temp_out_data = np.ones((252, 841*6))*np.nan
+temp_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    temp_out_data[:, irow:irow+841] = temperature_baseline_2004_2023.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2102))
+    temp_out_data[:, irow:irow+841] = temperature_baseline_2004_2023.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
 # %%
 temp_out_data
 
 # %%
-temp_out = pd.DataFrame(temp_out_data.T, index=index, columns=np.arange(1850, 2102))
+temp_out = pd.DataFrame(temp_out_data.T, index=index, columns=np.arange(1850, 2502))
 
 # %%
 temp_out
@@ -296,18 +312,44 @@ for scenario in scenarios:
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
 
 # %%
-forcing_out_data = np.ones((252, 841*6))*np.nan
+forcing_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_out_data[:, irow:irow+841] = f.forcing_sum.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2102))
+    forcing_out_data[:, irow:irow+841] = f.forcing_sum.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
 # %%
-forcing_out = pd.DataFrame(forcing_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_out = pd.DataFrame(forcing_out_data.T, index=index, columns=np.arange(1850, 2502))
 
 # %%
 forcing_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Top of Atmosphere Energy Imbalance',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+toa_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    toa_out_data[:, irow:irow+841] = f.toa_imbalance.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+toa_out = pd.DataFrame(toa_out_data.T, index=index, columns=np.arange(1850, 2502))
+toa_out
 
 # %%
 greenhouse_gases = [
@@ -371,7 +413,7 @@ for scenario in scenarios:
             scen_mods[scenario], 
             scenario, 
             'World', 
-            'Climate Assessment|Effective Radiative Forcing|Greenhouse Gases',
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Greenhouse Gases',
             'W/m2',
             config,
             'fair-2.2.4',
@@ -380,15 +422,15 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_ghg_out_data = np.ones((252, 841*6))*np.nan
+forcing_ghg_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_ghg_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=greenhouse_gases, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_ghg_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=greenhouse_gases, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
 # %%
-forcing_ghg_out = pd.DataFrame(forcing_ghg_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_ghg_out = pd.DataFrame(forcing_ghg_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_ghg_out
 
 # %%
@@ -405,7 +447,7 @@ for scenario in scenarios:
             scen_mods[scenario], 
             scenario, 
             'World', 
-            'Climate Assessment|Effective Radiative Forcing|Aerosols',
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Aerosols',
             'W/m2',
             config,
             'fair-2.2.4',
@@ -414,14 +456,14 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_aerosols_out_data = np.ones((252, 841*6))*np.nan
+forcing_aerosols_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_aerosols_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=aerosols, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_aerosols_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=aerosols, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
-forcing_aerosols_out = pd.DataFrame(forcing_aerosols_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_aerosols_out = pd.DataFrame(forcing_aerosols_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_aerosols_out
 
 # %%
@@ -447,14 +489,14 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_natural_out_data = np.ones((252, 841*6))*np.nan
+forcing_natural_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_natural_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=natural, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_natural_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=natural, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
-forcing_natural_out = pd.DataFrame(forcing_natural_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_natural_out = pd.DataFrame(forcing_natural_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_natural_out
 
 # %%
@@ -474,19 +516,174 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-concentration_co2_out_data = np.ones((252, 841*6))*np.nan
+concentration_co2_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    concentration_co2_out_data[:, irow:irow+841] = f.concentration.sel(scenario=scenario, specie='CO2', config=valid_all, timebounds=np.arange(1850, 2102))
+    concentration_co2_out_data[:, irow:irow+841] = f.concentration.sel(scenario=scenario, specie='CO2', config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
-concentration_co2_out = pd.DataFrame(concentration_co2_out_data.T, index=index, columns=np.arange(1850, 2102))
+concentration_co2_out = pd.DataFrame(concentration_co2_out_data.T, index=index, columns=np.arange(1850, 2502))
 concentration_co2_out
 
 # %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Natural|Solar',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_solar_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_solar_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Solar", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_solar_out = pd.DataFrame(forcing_solar_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_solar_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Natural|Volcanic',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_volcanic_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_volcanic_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Volcanic", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_volcanic_out = pd.DataFrame(forcing_volcanic_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_volcanic_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Ozone',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_ozone_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_ozone_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Ozone", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_ozone_out = pd.DataFrame(forcing_ozone_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_ozone_out
+
+# %%
+forcing_out_data - forcing_natural_out_data - forcing_ozone_out_data - forcing_ghg_out_data - forcing_aerosols_out_data
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Other',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_other_out_data = forcing_out_data - forcing_natural_out_data - forcing_ozone_out_data - forcing_ghg_out_data - forcing_aerosols_out_data
+
+forcing_other_out = pd.DataFrame(forcing_other_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_other_out
+
+# %%
+f.species_configs["ozone_radiative_efficiency"].sel(specie="Equivalent effective stratospheric chlorine")
+
+# %%
+f.species_configs["baseline_concentration"].sel(specie="Equivalent effective stratospheric chlorine")
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Ozone|Stratospheric',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_ozonestratospheric_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_ozonestratospheric_out_data[:, irow:irow+841] = (
+        f.concentration.sel(scenario=scenario, specie='Equivalent effective stratospheric chlorine', config=valid_all, timebounds=np.arange(1850, 2502)) -
+        f.species_configs["baseline_concentration"].sel(specie="Equivalent effective stratospheric chlorine")
+    ) * f.species_configs["ozone_radiative_efficiency"].sel(specie="Equivalent effective stratospheric chlorine")
+    irow = irow + 841
+
+forcing_ozonestratospheric_out = pd.DataFrame(forcing_ozonestratospheric_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_ozonestratospheric_out
+
+# %%
 data_out = pd.concat(
-    (temp_out, forcing_out, forcing_ghg_out, forcing_aerosols_out, forcing_natural_out, concentration_co2_out)
+    (
+        temp_out, 
+        toa_out,
+        forcing_out, 
+        forcing_ghg_out, 
+        forcing_aerosols_out, 
+        forcing_natural_out, 
+        forcing_solar_out, 
+        forcing_volcanic_out, 
+        forcing_ozone_out,
+        forcing_other_out,
+        forcing_ozonestratospheric_out,
+        concentration_co2_out
+    )
 )
 
 # %%
@@ -504,7 +701,7 @@ data_out.to_csv('../output/climate_assessment_full.csv')
 # %%
 f = FAIR(ch4_method="Thornhill2021")
 
-f.define_time(1750, 2101, 1)
+f.define_time(1750, 2501, 1)
 f.define_scenarios(scenarios)
 
 species, properties = read_properties(
@@ -527,17 +724,14 @@ f.allocate()
 # %%
 for scenario in scenarios:
     for specie in emitted_species:
-        f.emissions.loc[dict(timepoints=np.arange(1750.5, 2024), scenario=scenario, specie=specie)] = (
-            historical.loc[historical.variable==specie, '1750':].T
-        )
-        f.emissions.loc[dict(timepoints=np.arange(2024.5, 2101), scenario=scenario, specie=specie)] = (
-            future.loc[(future.variable==specie) & (future.scenario==scenario), '2024':].T
+        f.emissions.loc[dict(timepoints=np.arange(1750.5, 2501), scenario=scenario, specie=specie)] = (
+            future.loc[(future.variable==specie) & (future.scenario==scenario), '1750.0':].T
         )
     f.forcing.loc[dict(scenario=scenario, specie='Land use')] = (
-        df_landuse.loc[1750:2101, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Land use]"].values.squeeze()
+        df_landuse.loc[1750:2501, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Land use]"].values.squeeze()
     )
     f.forcing.loc[dict(scenario=scenario, specie='Irrigation')] = (
-        df_irrigation.loc[1750:2101, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Irrigation]"].values.squeeze()
+        df_irrigation.loc[1750:2501, scenarios_mapping[scenario]].values[:, None] * df_configs["forcing_scale[Irrigation]"].values.squeeze()
     )
 
 # %%
@@ -574,7 +768,7 @@ initialise(f.airborne_emissions, 0)
 f.run()
 
 # %%
-weights = np.zeros((352, 6, 841))
+weights = np.zeros((752, n_scen, 841))
 weights[100, :, :] = 0.5
 weights[101:151, :, :] = 1
 weights[151, :, :] = 0.5
@@ -591,7 +785,7 @@ temperature_baseline_1850_1900 = (
 )
 
 # %%
-weights = np.zeros((352, 6, 841))
+weights = np.zeros((752, n_scen, 841))
 weights[254, :, :] = 0.5
 weights[254:274, :, :] = 1
 weights[274, :, :] = 0.5
@@ -689,18 +883,18 @@ for scenario in scenarios:
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
 
 # %%
-temp_out_data = np.ones((252, 841*6))*np.nan
+temp_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    temp_out_data[:, irow:irow+841] = temperature_baseline_2004_2023.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2102))
+    temp_out_data[:, irow:irow+841] = temperature_baseline_2004_2023.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
 # %%
 temp_out_data
 
 # %%
-temp_out = pd.DataFrame(temp_out_data.T, index=index, columns=np.arange(1850, 2102))
+temp_out = pd.DataFrame(temp_out_data.T, index=index, columns=np.arange(1850, 2502))
 
 # %%
 temp_out
@@ -725,18 +919,44 @@ for scenario in scenarios:
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
 
 # %%
-forcing_out_data = np.ones((252, 841*6))*np.nan
+forcing_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_out_data[:, irow:irow+841] = f.forcing_sum.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2102))
+    forcing_out_data[:, irow:irow+841] = f.forcing_sum.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
 # %%
-forcing_out = pd.DataFrame(forcing_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_out = pd.DataFrame(forcing_out_data.T, index=index, columns=np.arange(1850, 2502))
 
 # %%
 forcing_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Top of Atmosphere Energy Imbalance',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+toa_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    toa_out_data[:, irow:irow+841] = f.toa_imbalance.sel(scenario=scenario, config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+toa_out = pd.DataFrame(toa_out_data.T, index=index, columns=np.arange(1850, 2502))
+toa_out
 
 # %%
 greenhouse_gases = [
@@ -800,7 +1020,7 @@ for scenario in scenarios:
             scen_mods[scenario], 
             scenario, 
             'World', 
-            'Climate Assessment|Effective Radiative Forcing|Greenhouse Gases',
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Greenhouse Gases',
             'W/m2',
             config,
             'fair-2.2.4',
@@ -809,15 +1029,15 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_ghg_out_data = np.ones((252, 841*6))*np.nan
+forcing_ghg_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_ghg_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=greenhouse_gases, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_ghg_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=greenhouse_gases, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
 # %%
-forcing_ghg_out = pd.DataFrame(forcing_ghg_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_ghg_out = pd.DataFrame(forcing_ghg_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_ghg_out
 
 # %%
@@ -834,7 +1054,7 @@ for scenario in scenarios:
             scen_mods[scenario], 
             scenario, 
             'World', 
-            'Climate Assessment|Effective Radiative Forcing|Aerosols',
+            'Climate Assessment|Effective Radiative Forcing|Antropogenic|Aerosols',
             'W/m2',
             config,
             'fair-2.2.4',
@@ -843,14 +1063,14 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_aerosols_out_data = np.ones((252, 841*6))*np.nan
+forcing_aerosols_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_aerosols_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=aerosols, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_aerosols_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=aerosols, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
-forcing_aerosols_out = pd.DataFrame(forcing_aerosols_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_aerosols_out = pd.DataFrame(forcing_aerosols_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_aerosols_out
 
 # %%
@@ -876,14 +1096,14 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-forcing_natural_out_data = np.ones((252, 841*6))*np.nan
+forcing_natural_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    forcing_natural_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=natural, config=valid_all, timebounds=np.arange(1850, 2102)).sum(dim='specie')
+    forcing_natural_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie=natural, config=valid_all, timebounds=np.arange(1850, 2502)).sum(dim='specie')
     irow = irow + 841
 
-forcing_natural_out = pd.DataFrame(forcing_natural_out_data.T, index=index, columns=np.arange(1850, 2102))
+forcing_natural_out = pd.DataFrame(forcing_natural_out_data.T, index=index, columns=np.arange(1850, 2502))
 forcing_natural_out
 
 # %%
@@ -903,19 +1123,165 @@ for scenario in scenarios:
         mi.append(ix)
 
 index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
-concentration_co2_out_data = np.ones((252, 841*6))*np.nan
+concentration_co2_out_data = np.ones((652, 841*n_scen))*np.nan
 irow = 0
 for scenario in scenarios:
     # for config in valid_all:
-    concentration_co2_out_data[:, irow:irow+841] = f.concentration.sel(scenario=scenario, specie='CO2', config=valid_all, timebounds=np.arange(1850, 2102))
+    concentration_co2_out_data[:, irow:irow+841] = f.concentration.sel(scenario=scenario, specie='CO2', config=valid_all, timebounds=np.arange(1850, 2502))
     irow = irow + 841
 
-concentration_co2_out = pd.DataFrame(concentration_co2_out_data.T, index=index, columns=np.arange(1850, 2102))
+concentration_co2_out = pd.DataFrame(concentration_co2_out_data.T, index=index, columns=np.arange(1850, 2502))
 concentration_co2_out
 
 # %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Natural|Solar',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_solar_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_solar_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Solar", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_solar_out = pd.DataFrame(forcing_solar_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_solar_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Natural|Volcanic',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_volcanic_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_volcanic_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Volcanic", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_volcanic_out = pd.DataFrame(forcing_volcanic_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_volcanic_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Ozone',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_ozone_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_ozone_out_data[:, irow:irow+841] = f.forcing.sel(scenario=scenario, specie="Ozone", config=valid_all, timebounds=np.arange(1850, 2502))
+    irow = irow + 841
+
+forcing_ozone_out = pd.DataFrame(forcing_ozone_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_ozone_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Other',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_other_out_data = forcing_out_data - forcing_natural_out_data - forcing_ozone_out_data - forcing_ghg_out_data - forcing_aerosols_out_data
+
+forcing_other_out = pd.DataFrame(forcing_other_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_other_out
+
+# %%
+mi = []
+for scenario in scenarios:
+    for config in valid_all:
+        ix = (
+            scen_mods[scenario], 
+            scenario, 
+            'World', 
+            'Climate Assessment|Effective Radiative Forcing|Anthropogenic|Ozone|Stratospheric',
+            'W/m2',
+            config,
+            'fair-2.2.4',
+            '1.6.0-full',
+        )
+        mi.append(ix)
+
+index = pd.MultiIndex.from_tuples(mi, names=['model', 'scenario', 'region', 'variable', 'unit', 'ensemble_member', 'climate_model', 'calibration'])
+forcing_ozonestratospheric_out_data = np.ones((652, 841*n_scen))*np.nan
+irow = 0
+for scenario in scenarios:
+    # for config in valid_all:
+    forcing_ozonestratospheric_out_data[:, irow:irow+841] = (
+        f.concentration.sel(scenario=scenario, specie='Equivalent effective stratospheric chlorine', config=valid_all, timebounds=np.arange(1850, 2502)) -
+        f.species_configs["baseline_concentration"].sel(specie="Equivalent effective stratospheric chlorine")
+    ) * f.species_configs["ozone_radiative_efficiency"].sel(specie="Equivalent effective stratospheric chlorine")
+    irow = irow + 841
+
+forcing_ozonestratospheric_out = pd.DataFrame(forcing_ozonestratospheric_out_data.T, index=index, columns=np.arange(1850, 2502))
+forcing_ozonestratospheric_out
+
+# %%
 data_out = pd.concat(
-    (temp_out, forcing_out, forcing_ghg_out, forcing_aerosols_out, forcing_natural_out, concentration_co2_out)
+    (
+        temp_out, 
+        toa_out,
+        forcing_out, 
+        forcing_ghg_out, 
+        forcing_aerosols_out, 
+        forcing_natural_out, 
+        forcing_solar_out, 
+        forcing_volcanic_out, 
+        forcing_ozone_out,
+        forcing_other_out,
+        forcing_ozonestratospheric_out,
+        concentration_co2_out
+    )
 )
 
 # %%
